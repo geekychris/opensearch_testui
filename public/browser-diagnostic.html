@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenSearch Browser Diagnostic</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { border-color: green; background: #f0fff0; }
+        .error { border-color: red; background: #fff0f0; }
+        .info { border-color: blue; background: #f0f0ff; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>OpenSearch Browser Diagnostic</h1>
+    <p>This will test the exact same requests your React app makes, running from the same browser environment.</p>
+    
+    <button onclick="runDiagnostic()">Run Full Diagnostic</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        let resultDiv = document.getElementById('results');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test ${type}`;
+            div.innerHTML = message;
+            resultDiv.appendChild(div);
+        }
+
+        function clearResults() {
+            resultDiv.innerHTML = '';
+        }
+
+        async function testProxyHealth() {
+            log('Testing proxy health...', 'info');
+            log(`Attempting to connect from: ${window.location.origin}`, 'info');
+            
+            try {
+                const response = await fetch('http://localhost:3002/health', {
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                const data = await response.json();
+                log(`✅ Proxy Health: ${response.status}<pre>${JSON.stringify(data, null, 2)}</pre>`, 'success');
+                return true;
+            } catch (error) {
+                log(`❌ Proxy Health Failed: ${error.message}`, 'error');
+                log(`❌ This might be a CORS issue. You should access this diagnostic from: http://localhost:3001/browser-diagnostic.html`, 'error');
+                return false;
+            }
+        }
+
+        async function testOpenSearchConnection() {
+            log('Testing OpenSearch connection (mimicking React app)...', 'info');
+            
+            // Create the exact same request the React app makes
+            const config = {
+                host: 'localhost',
+                port: 30920,
+                protocol: 'http'
+            };
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-OpenSearch-Target': `${config.protocol}://${config.host}:${config.port}`
+            };
+
+            log(`Request headers: <pre>${JSON.stringify(headers, null, 2)}</pre>`, 'info');
+            log(`Target URL: http://localhost:3002/api/opensearch/`, 'info');
+
+            try {
+                const response = await fetch('http://localhost:3002/api/opensearch/', {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const responseHeaders = {};
+                for (let [key, value] of response.headers.entries()) {
+                    responseHeaders[key] = value;
+                }
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ OpenSearch Connection Success: ${response.status}<pre>Response Headers:\n${JSON.stringify(responseHeaders, null, 2)}\n\nResponse Data:\n${JSON.stringify(data, null, 2)}</pre>`, 'success');
+                    return true;
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ OpenSearch Connection Failed: ${response.status}<pre>Response Headers:\n${JSON.stringify(responseHeaders, null, 2)}\n\nError:\n${errorText}</pre>`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ OpenSearch Connection Error: ${error.message}<pre>Error Details:\n${error.stack}</pre>`, 'error');
+                return false;
+            }
+        }
+
+        async function testWithAxiosLikeConfig() {
+            log('Testing with Axios-like configuration (closer to React app)...', 'info');
+
+            const config = {
+                host: 'localhost',
+                port: 30920,
+                protocol: 'http'
+            };
+
+            // Simulate what axios.create does
+            const baseURL = 'http://localhost:3002/api/opensearch';
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-OpenSearch-Target': `${config.protocol}://${config.host}:${config.port}`
+            };
+
+            try {
+                // Add a delay like our React app does
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                const response = await fetch(`${baseURL}/`, {
+                    method: 'GET',
+                    headers: headers,
+                    // Add timeout simulation
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Axios-like Request Success: ${response.status}<pre>Cluster: ${data.cluster_name}\nVersion: ${data.version?.number}</pre>`, 'success');
+                    return true;
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ Axios-like Request Failed: ${response.status}<pre>${errorText}</pre>`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Axios-like Request Error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testCORSPreflight() {
+            log('Testing CORS preflight (OPTIONS request)...', 'info');
+            try {
+                const response = await fetch('http://localhost:3002/api/opensearch/', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-OpenSearch-Target': 'http://localhost:30920'
+                    }
+                });
+
+                const corsHeaders = {};
+                ['access-control-allow-origin', 'access-control-allow-methods', 'access-control-allow-headers'].forEach(header => {
+                    if (response.headers.has(header)) {
+                        corsHeaders[header] = response.headers.get(header);
+                    }
+                });
+
+                log(`✅ CORS Preflight: ${response.status}<pre>${JSON.stringify(corsHeaders, null, 2)}</pre>`, response.ok ? 'success' : 'error');
+            } catch (error) {
+                log(`❌ CORS Preflight Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function runDiagnostic() {
+            clearResults();
+            log('🔍 Starting comprehensive browser diagnostic...', 'info');
+            log(`Current URL: ${window.location.href}`, 'info');
+            log(`User Agent: ${navigator.userAgent}`, 'info');
+
+            // Test 1: Proxy Health
+            const proxyHealthy = await testProxyHealth();
+            
+            if (!proxyHealthy) {
+                log('❌ Proxy not healthy, stopping diagnostic', 'error');
+                return;
+            }
+
+            // Test 2: CORS Preflight
+            await testCORSPreflight();
+
+            // Test 3: Basic OpenSearch Connection
+            await testOpenSearchConnection();
+
+            // Test 4: Axios-like Configuration
+            await testWithAxiosLikeConfig();
+
+            log('🏁 Diagnostic complete! Check results above.', 'info');
+        }
+    </script>
+</body>
+</html>
