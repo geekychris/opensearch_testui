@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Opensearch Testui logo" width="180">
+</p>
+
 # OpenSearch Experimenter UI
 
 A comprehensive React-based user interface for interacting with OpenSearch clusters. This application provides a rich set of tools for managing indices, importing data, searching, and monitoring your OpenSearch deployment.
